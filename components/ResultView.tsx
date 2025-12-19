@@ -1,11 +1,10 @@
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, 
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Cell
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell
 } from 'recharts';
 import { CATEGORIES } from '../constants';
-import { getAnalysisFromAI } from '../services/geminiService';
 
 interface ResultViewProps {
   answers: Record<number, number>;
@@ -13,15 +12,15 @@ interface ResultViewProps {
 }
 
 const ResultView: React.FC<ResultViewProps> = ({ answers, onReset }) => {
-  const [aiAnalysis, setAiAnalysis] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-
   const processedData = CATEGORIES.map(cat => {
     const subFactors = cat.subFactors.map(sf => {
-      const score = sf.questionIds.reduce((sum, qId) => sum + (answers[qId] || 0), 0);
+      const scores = sf.questionIds.map(qId => answers[qId] || 0);
+      const totalScore = scores.reduce((a, b) => a + b, 0);
       return {
         label: sf.label,
-        score: score, // Max 15 per subfactor (3 questions * 5 points)
+        score: totalScore,
+        questionIds: sf.questionIds,
+        individualScores: scores,
       };
     });
     
@@ -35,28 +34,32 @@ const ResultView: React.FC<ResultViewProps> = ({ answers, onReset }) => {
     };
   });
 
-  // Radar chart needs flattened data
   const radarData = processedData.flatMap(cat => cat.subFactors.map(sf => ({
     subject: sf.label,
     A: sf.score,
     fullMark: 15,
   })));
 
-  useEffect(() => {
-    const analyze = async () => {
-      setLoading(true);
-      const res = await getAnalysisFromAI(processedData);
-      setAiAnalysis(res || "");
-      setLoading(false);
-    };
-    analyze();
-  }, []);
+  const getDevelopmentDirection = (categoryName: string) => {
+    switch (categoryName) {
+      case "논리적 설득 (Logical Persuasion)":
+        return "데이터 기반의 설득력을 강화하고, 복잡한 정보를 구조화하여 전달하는 훈련이 필요합니다. 명확한 결론 도출 역량을 키우세요.";
+      case "카리스마 (Charisma)":
+        return "자신감 있는 비언어적 소통과 확신에 찬 메시지 전달력을 높여야 합니다. 긍정적인 영향력으로 팀의 동기를 부여하는 연습이 중요합니다.";
+      case "자각 유도 (Self-Awareness)":
+        return "코칭형 리더십으로 전환하기 위해 질문 기법과 적극적 경청 기술을 연마해야 합니다. 상대방 스스로 답을 찾게 하는 여유가 필요합니다.";
+      case "감성 합일 (Emotional Unity)":
+        return "정서적 유대감을 형성하는 공감 능력을 키우고, 조직의 비전을 감성적인 스토리텔링으로 녹여내는 역량을 개발하세요.";
+      default:
+        return "";
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="text-center mb-12">
-        <h1 className="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">Balance Leadership 진단 결과</h1>
-        <p className="text-slate-500 text-lg">귀하의 리더십 균형과 특성을 한눈에 확인하세요.</p>
+        <h1 className="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">Balance Leadership 진단 리포트</h1>
+        <p className="text-slate-500 text-lg">측정된 데이터를 기반으로 리더십 밸런스를 분석합니다.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
@@ -64,7 +67,7 @@ const ResultView: React.FC<ResultViewProps> = ({ answers, onReset }) => {
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 flex flex-col">
           <h3 className="text-xl font-bold mb-6 text-slate-800 flex items-center">
             <span className="w-2 h-6 bg-blue-600 rounded-full mr-3"></span>
-            종합 역량 다이어그램
+            종합 리더십 프로파일
           </h3>
           <div className="flex-grow min-h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -87,8 +90,8 @@ const ResultView: React.FC<ResultViewProps> = ({ answers, onReset }) => {
         {/* Category Totals */}
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 flex flex-col">
           <h3 className="text-xl font-bold mb-6 text-slate-800 flex items-center">
-            <span className="w-2 h-6 bg-purple-600 rounded-full mr-3"></span>
-            핵심 영역별 점수
+            <span className="w-2 h-6 bg-indigo-600 rounded-full mr-3"></span>
+            4대 핵심 역량 지표
           </h3>
           <div className="flex-grow min-h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -107,37 +110,55 @@ const ResultView: React.FC<ResultViewProps> = ({ answers, onReset }) => {
         </div>
       </div>
 
-      {/* AI Detailed Feedback */}
-      <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 mb-12 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-4 opacity-5">
-          <svg width="200" height="200" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" />
-            <path d="M12,6a6,6,0,1,0,6,6A6,6,0,0,0,12,6Zm0,10a4,4,0,1,1,4-4A4,4,0,0,1,12,16Z" />
-          </svg>
+      {/* Detailed Score Mapping */}
+      <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 mb-12">
+        <h3 className="text-2xl font-bold mb-8 text-slate-900 border-b pb-4">상세 스코어 산출 내역</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
+          {processedData.map((cat) => (
+            <div key={cat.name} className="space-y-4">
+              <h4 className="font-bold text-lg flex items-center" style={{ color: cat.color }}>
+                {cat.name}
+              </h4>
+              <div className="space-y-3 bg-slate-50 p-6 rounded-2xl">
+                {cat.subFactors.map((sf) => (
+                  <div key={sf.label} className="flex justify-between items-center text-sm">
+                    <span className="text-slate-600 font-medium w-32">{sf.label}</span>
+                    <span className="font-mono bg-white px-3 py-1 rounded-lg shadow-sm border border-slate-100">
+                      {sf.score} = {sf.individualScores.join('+')} ({sf.questionIds.join('+')})
+                    </span>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-slate-200 mt-2 flex justify-between font-bold">
+                  <span>총점</span>
+                  <span style={{ color: cat.color }}>{cat.total} / 60</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-        
-        <h3 className="text-2xl font-bold mb-8 text-slate-900 flex items-center">
-          <span className="bg-blue-100 p-2 rounded-lg mr-4">
-            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </span>
-          AI 리더십 코칭 리포트
-        </h3>
-
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-medium animate-pulse">심층 분석 데이터를 생성 중입니다...</p>
-          </div>
-        ) : (
-          <div className="prose prose-slate max-w-none text-slate-700 leading-relaxed whitespace-pre-wrap">
-            {aiAnalysis}
-          </div>
-        )}
       </div>
 
-      <div className="flex justify-center space-x-4">
+      {/* Development Direction */}
+      <div className="bg-slate-900 text-white p-10 rounded-3xl shadow-2xl mb-12">
+        <h3 className="text-2xl font-bold mb-8 flex items-center">
+          <svg className="w-8 h-8 mr-3 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          향후 역량 개발 방향
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {processedData.map((cat) => (
+            <div key={cat.name} className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+              <h4 className="font-bold text-lg mb-3" style={{ color: cat.color }}>{cat.name}</h4>
+              <p className="text-slate-300 leading-relaxed text-sm">
+                {getDevelopmentDirection(cat.name)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-center space-x-4 no-print">
         <button
           onClick={() => window.print()}
           className="bg-slate-800 text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:bg-slate-700 transition-all flex items-center"
@@ -152,6 +173,14 @@ const ResultView: React.FC<ResultViewProps> = ({ answers, onReset }) => {
           다시 진단하기
         </button>
       </div>
+
+      <style>{`
+        @media print {
+          .no-print { display: none; }
+          body { background: white; }
+          .shadow-xl, .shadow-2xl { shadow: none; border: 1px solid #eee; }
+        }
+      `}</style>
     </div>
   );
 };
